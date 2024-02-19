@@ -16,13 +16,17 @@ Furthermore, it should track each request specifically, as tying together logs f
 from db_o11y.utils import auto_log
 
 class MyViewSet(View):
-    @auto_log()  # Simply decorate class-based views with this one line
+    @auto_log()  # Simply decorate views with this one line
     def get(self, request, *args, **kwargs):
-        self._logs.append('Request start')
+
+        # The decorator updates the request object with a method called 'add_log'.
+        # This method updates a variable at the decorator-level via a closure.
+
+        request.add_log('Request start')
         ...
-        self._logs.append('Something happened')
+        request.add_log('Something happened')
         ...
-        self._logs.append('Request end')
+        request.add_log('Request end')
         return JsonResponse({'message': 'Hunky dory!'}, status=200)
 ```
 
@@ -47,17 +51,14 @@ I considered stripping out the Django project stuff from this repo, but then the
 
 ## Testing
 
-Run `python manage.py test` -> currently 25 tests.
+Run `python manage.py test` -> currently 30 tests.
 
 It goes without saying that if you modify / edit the functionality, then the tests should be updated as well. They should be simple enough to follow.
 
 ## Future plans
 
-* Currently, this works only for Django class-based views. I will aim to extend to functional views soon. 
-  * The only way I can see that working is if the functional views take another input argument. That's more intrusive but I don't think we can mutate a function in-place, so it might be necessary.
-
 * Ideally this could be some kind of cross-framework solution, maybe utilising SQL Alchemy which is commonly used in conjunction with Flask and FastAPI. It is currently tied to the Django ORM however.
 
 * Observability is more than just logs and traces however. Maybe one day I will get around to implementing metrics and other observability features. But this currently meets 99% of my current requirements.
 
-* Learn how to deploy on PyPi so there is no manual tinkering required ot install this project into the app, and then it can be done just like any other django-related package.
+* Learn how to deploy on PyPi so there is no manual tinkering required to install this project into the app, and then it can be done just like any other django-related package.

@@ -8,7 +8,7 @@ from django.test.client import RequestFactory
 from django.urls import reverse
 
 from .models import O11yLog
-from .views import HtmlViews
+from .views import HtmlViews, HtmlFunView, ErrorFunView
 from .utils import (
     auto_log, 
     _extract_base_url, 
@@ -126,6 +126,9 @@ class AutoLogTest(WithClientMixin):
         log = O11yLog.objects.last()
         self.assertGreater(log.duration, 1)
         self.assertEqual(len(log.logs), 2)
+        for item in log.logs:
+            self.assertIn('message', item)
+            self.assertIn('elapsed', item)
 
 
 class ExtractRequestBaseUrlTest(WithClientMixin):
@@ -245,3 +248,78 @@ class Get500Test(WithClientMixin):
         request = RequestFactory().get(reverse("error"))
         result = _get_500(request, custom_500)
         self.assertEqual(result, custom_500)
+
+
+class FunctionViewTest(WithClientMixin):
+
+    def test_get_with_custom_config(self):
+        request = RequestFactory().get(f'{reverse("html-fun")}?key1=value1')
+
+        for log_inputs, log_outputs in (
+            (False, False),
+            (True, False),
+            (False, True),
+            (True, True),
+        ):
+            with self.subTest(f'{log_inputs}, {log_outputs}'):
+                pre = _pre_configure_response(HtmlFunView, request) 
+                @auto_log(log_inputs, log_outputs)
+                def view(request):
+                    return pre
+                view(request)
+
+                log = O11yLog.objects.last()
+                if log_inputs:
+                    self.assertDictEqual(log.request_payload, {'key1': 'value1'})
+                else:
+                    self.assertIsNone(log.request_payload)
+
+                if log_outputs:
+                    self.assertEqual(log.response_payload, '<h1>GET via function</h1>')
+                else:
+                    self.assertIsNone(log.response_payload)
+    
+    def test_add_logs(self):
+        request = RequestFactory().get(f'{reverse("html-fun")}?key1=value1')
+        HtmlFunView(request)
+
+        log = O11yLog.objects.last()
+        self.assertEqual(len(log.logs), 2)
+        for item in log.logs:
+            self.assertIn('message', item)
+            self.assertIn('elapsed', item)
+    
+    def test_error_handled(self):
+        request = RequestFactory().get(reverse("error-fun"))
+
+        @auto_log(catch_exceptions=True)
+        def view(request):
+            return ErrorFunView(request)
+        view(request)
+
+        log = O11yLog.objects.last()
+        self.assertIsNotNone(log.exception)
+
+    def test_error_unhandled(self):
+        request = RequestFactory().get(reverse("error-fun"))
+
+        @auto_log(catch_exceptions=False)
+        def view(request):
+            return ErrorFunView(request)
+        
+        with self.assertRaises(ValueError):
+            view(request)
+
+        log = O11yLog.objects.last()
+        self.assertIsNotNone(log.exception)
+
+    def test_error_custom_500(self):
+        request = RequestFactory().get(reverse("error-fun"))
+        custom_500 = JsonResponse({'message': 'error'}, status=500)
+
+        @auto_log(catch_exceptions=True, http500=custom_500)
+        def view(request):
+            return ErrorFunView(request)
+        response = view(request)
+
+        self.assertEqual(response, custom_500)

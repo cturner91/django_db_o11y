@@ -22,15 +22,23 @@ def auto_log(log_inputs=False, log_outputs=False, catch_exceptions=True, http500
     If catch_exceptions is enabled then if the code raises an exception, it is caught, the 
     exception is captured, and the user gets a generic Http500 response.
 
-    The decorator also configures a variable on the request object called '_logs'. This is
-    a list, and within the Django view code, individual logs can be appended. Then, when
-    the view is finished and the response has been generated, these logs are committed to the DB.
+    The decorator configures a method on the request object called 'add_log'. This appends to
+    a list on the decorator namespace, and within the Django view code, individual logs can be 
+    appended. Then, when the view is finished and the response has been generated, these logs 
+    are committed to the DB.
     '''
     def outer(func):
         @wraps(func)
         def inner(*args, **kwargs):
             request = _extract_request(*args)
-            setattr(request, '_logs', [])  # this variable can be customised if necessary
+            logs = []
+            dt0 = timezone.now()
+
+            # this variable can be customised if necessary
+            setattr(request, 'add_log', lambda message: logs.append({
+                'elapsed': (timezone.now() - dt0).total_seconds(),
+                'message': message,
+            }))
             log = O11yLog(
                 url=_extract_base_url(request), 
                 method=request.method,
@@ -58,7 +66,7 @@ def auto_log(log_inputs=False, log_outputs=False, catch_exceptions=True, http500
                         _extract_response_payload(response) if log_outputs else None
                     )
 
-                log.logs = getattr(request, '_logs')
+                log.logs = logs
                 log.request_end = timezone.now()
                 log.duration = (log.request_end - log.request_start).total_seconds()
                 log.save()
