@@ -2,7 +2,7 @@ from functools import wraps
 import json
 import traceback
 
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, Http404
 from django.core.handlers.wsgi import WSGIRequest
 from django.utils import timezone
 
@@ -56,7 +56,12 @@ def auto_log(log_inputs=False, log_outputs=False, catch_exceptions=True, http500
                 exc = e
             finally:
                 if exc and catch_exceptions:
-                    response = _get_500(request, http500)
+                    # 404 can be raised if object doesn't exist, so there is a case where a wrapped
+                    # view can raise 404
+                    if isinstance(exc, Http404):
+                        response = _get_404(request)
+                    else:
+                        response = _get_500(request, http500)
                     exc = None
 
                 # block cannot be run if there is an exception and it should be raised
@@ -125,3 +130,11 @@ def _get_500(request, http500):
             return JSON_500
         else:
             return HTML_500
+
+
+def _get_404(request):
+    '''Utility returns a JSON object if the request is JSON, otherwise returns HTML'''
+    if request.content_type == 'application/json':
+        return JsonResponse({'message': 'Not found'}, status=404)
+    else:
+        return HttpResponse('<h1>Not found</h1>', status=404)

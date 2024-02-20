@@ -16,6 +16,7 @@ from .utils import (
     _extract_request_payload, 
     _extract_response_payload,
     _extract_session_id, 
+    _get_404,
     _get_500,
 )
 
@@ -131,6 +132,24 @@ class AutoLogTest(WithClientMixin):
             self.assertIn('elapsed', item)
 
 
+class Test404(WithClientMixin):
+
+    def test_404_handled_html(self):
+        response = self.client.get(reverse('h404'), headers={'Content-Type': 'text/html'})
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.content.decode('utf-8'), '<h1>Not found</h1>')
+
+    def test_404_handled_json(self):
+        response = self.client.get(reverse('h404'), headers={'Content-Type': 'application/json'})
+        self.assertEqual(response.status_code, 404)
+        self.assertDictEqual(json.loads(response.content.decode('utf-8')), {'message': 'Not found'})
+
+    def test_404_unhandled(self):
+        response = self.client.get(reverse('u404'))
+        self.assertEqual(response.status_code, 404)
+        # don't validate Django's standard 404 response, I don't control it
+
+
 class ExtractRequestBaseUrlTest(WithClientMixin):
     
     def test_basic_url(self):
@@ -183,17 +202,23 @@ class ExtractRequestPayloadTest(WithClientMixin):
         self.assertDictEqual(payload, {'key1': 'value1'})
 
     def test_post(self):
-        request = RequestFactory().post(reverse("html"), data={'key': 'value', 'key2': 'value2'})
+        request = RequestFactory().post(
+            reverse("html"), data={'key': 'value', 'key2': 'value2'}
+        )
         payload = _extract_request_payload(request)
         self.assertDictEqual(payload, {'key': 'value', 'key2': 'value2'})
 
     def test_put(self):
-        request = RequestFactory().put(reverse("html"), data=json.dumps({'key': 'value', 'key2': 'value2'}))
+        request = RequestFactory().put(
+            reverse("html"), data=json.dumps({'key': 'value', 'key2': 'value2'})
+        )
         payload = _extract_request_payload(request)
         self.assertDictEqual(payload, {'key': 'value', 'key2': 'value2'})
 
     def test_delete(self):
-        request = RequestFactory().delete(reverse("html"), data=json.dumps({'key': 'value', 'key2': 'value2'}))
+        request = RequestFactory().delete(
+            reverse("html"), data=json.dumps({'key': 'value', 'key2': 'value2'})
+        )
         payload = _extract_request_payload(request)
         self.assertDictEqual(payload, {'key': 'value', 'key2': 'value2'})
 
@@ -239,7 +264,9 @@ class Get500Test(WithClientMixin):
 
     def test_with_json_request(self):
         from db_o11y.utils import JSON_500
-        request = RequestFactory().get(reverse("error"), headers={'Content-Type': 'application/json'})
+        request = RequestFactory().get(
+            reverse("error"), headers={'Content-Type': 'application/json'}
+        )
         result = _get_500(request, None)
         self.assertEqual(result, JSON_500)
 
@@ -249,6 +276,23 @@ class Get500Test(WithClientMixin):
         result = _get_500(request, custom_500)
         self.assertEqual(result, custom_500)
 
+
+class Get404Test(WithClientMixin):
+
+    def test_with_html_request(self):
+        request = RequestFactory().get(reverse("error"))
+        result = _get_404(request)
+        self.assertEqual(result.status_code, 404)
+        self.assertEqual(result.content.decode('utf-8'), '<h1>Not found</h1>')
+
+    def test_with_json_request(self):
+        request = RequestFactory().get(
+            reverse("error"), headers={'Content-Type': 'application/json'}
+        )
+        result = _get_404(request)
+        self.assertEqual(result.status_code, 404)
+        self.assertDictEqual(json.loads(result.content.decode('utf-8')), {'message': 'Not found'})
+    
 
 class FunctionViewTest(WithClientMixin):
 

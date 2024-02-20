@@ -1,7 +1,7 @@
 from datetime import datetime
 from time import sleep
 
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, Http404
 from django.views import View
 
 from .utils import auto_log
@@ -97,3 +97,15 @@ def HtmlFunView(request):
 def ErrorFunView(request):
     request.add_log(f'Start at: {datetime.utcnow().isoformat()}')
     raise ValueError('Bad value')
+
+
+@auto_log()
+def Handled404View(request):
+    request.add_log(f'Start at: {datetime.utcnow().isoformat()}')
+    raise Http404()
+
+
+@auto_log(catch_exceptions=False)
+def Unhandled404View(request):
+    request.add_log(f'Start at: {datetime.utcnow().isoformat()}')
+    raise Http404()
